@@ -1,24 +1,35 @@
-# This is a template for a Ruby scraper on Morph (https://morph.io)
-# including some code snippets below that you should find helpful
+require 'scraperwiki'
+require 'mechanize'
 
-# require 'scraperwiki'
-# require 'mechanize'
-# 
-# agent = Mechanize.new
-#
-# # Read in a page 
-# page = agent.get("http://foo.com")
-#
-# # Find somehing on the page using css selectors
-# p page.at('div.content')
-#
-# # Write out to the sqlite database using scraperwiki library
-# ScraperWiki.save_sqlite(["name"], {"name" => "susan", "occupation" => "software developer"})
-#
-# # An arbitrary query against the database
-# ScraperWiki.select("* from data where 'name'='peter'")
+agent = Mechanize.new
 
-# You don't have to do things with the Mechanize or ScraperWiki libraries. You can use whatever gems are installed
-# on Morph for Ruby (https://github.com/openaustralia/morph-docker-ruby/blob/master/Gemfile) and all that matters
-# is that your final data is written to an Sqlite database called data.sqlite in the current working directory which
-# has at least a table called data.
+page = agent.get("http://www.bluemts.com.au/whatson/?sMonth=5&sYear=2014")
+event_urls = page.search(".eventlist").map {|e| e.at("a")["href"]}
+#event_urls = ["http://www.bluemts.com.au/whatson/?evID=8662"]
+
+event_urls.each do |event_url|
+  puts "Reading #{event_url}..."
+  page = agent.get(event_url)
+  e = page.at(".event")
+  record = {}
+  record["source_url"] = event_url
+  record["name"] = e.at("h2").inner_text
+  if e.at(".date .start")
+    record["start_date"] = e.at(".date .start").inner_text.split(":")[1].strip
+  end
+  if e.at(".date .end")
+    record["end_date"] = e.at(".date .end").inner_text.split(":")[1].strip
+  end
+  if e.at(".date .price")
+    record["price"] = e.at(".date .price").inner_text.split(":")[1].strip
+  end
+  record["date"] = e.at(".date").inner_text.squeeze.strip
+  record["description"] = e.at(".desc").inner_text.strip
+  record["image_url"] = (page.uri + e.at(".thumb a")["href"]).to_s if e.at(".thumb")
+  record["location"] = e.at(".location").inner_text
+  record["contact"] = e.at(".contact").inner_text
+  record["email"] = e.at(".email a")["href"].split(":")[1] if e.at(".email a")
+
+  p record
+  ScraperWiki.save_sqlite(["source_url"], record)
+end
